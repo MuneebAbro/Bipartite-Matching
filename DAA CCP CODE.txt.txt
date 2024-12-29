@@ -1,0 +1,107 @@
+# A python library to work with shapes
+from shapely.geometry import Point, Polygon, LineString
+
+# Function to input coordinates for switches, lights, and wall segments
+def input_coordinates(entity_name, count, is_segment=False):
+    coordinates = []
+    print(f"Enter the coordinates for {count} {entity_name}(s):")
+    for i in range(count):
+        while True:
+            try:
+                if is_segment:
+                    x1, y1, x2, y2 = map(int, input(f"  {entity_name} {i + 1} (x1 y1 x2 y2): ").split())
+                    coordinates.append(((x1, y1), (x2, y2)))
+                else:
+                    x, y = map(int, input(f"  {entity_name} {i + 1} (x y): ").split())
+                    coordinates.append((x, y))
+                break
+            except ValueError:
+                print("Invalid input. Please enter the correct number of integers.")
+    return coordinates
+
+# Function to check if two line segments intersect
+def do_segments_intersect(p1, q1, p2, q2):
+    line1 = LineString([p1, q1])
+    line2 = LineString([p2, q2])
+    return line1.intersects(line2)
+
+# Function to check if a point is inside a polygon
+def is_point_inside_polygon(point, polygon):
+    return Polygon(polygon).contains(Point(point))
+
+# Function to check if a switch can see a light, considering walls and boundaries
+def is_visible(switch, light, walls, polygon_boundary):
+    # Check if both the switch and light are inside the polygon
+    switch_inside = is_point_inside_polygon(switch, polygon_boundary)
+    light_inside = is_point_inside_polygon(light, polygon_boundary)
+    
+    # Allow visibility only if both points are in the same region (inside the polygon)
+    if switch_inside and light_inside:
+        # Check for wall obstructions
+        for wall in walls:
+            if do_segments_intersect(switch, light, wall[0], wall[1]):
+                return False  # A wall blocks the visibility
+        return True  # No walls block the visibility
+    
+    return False  # Either one is outside the polygon
+
+
+# Main function
+def main():
+    # Get the number of switches, lights, and wall segments from the user
+    try:
+        num_switches = int(input("Enter the number of switches: "))
+        num_lights = int(input("Enter the number of lights: "))
+        num_walls = int(input("Enter the number of walls: "))
+    except ValueError:
+        print("Invalid input. Please enter integers.")
+        return
+
+    # Input coordinates for switches, lights, and walls
+    switches = input_coordinates("switch", num_switches)
+    lights = input_coordinates("light", num_lights)
+    walls = input_coordinates("wall", num_walls, is_segment=True)
+
+    # Extract the polygon boundary from the walls (wall start points)
+    polygon_boundary = [wall[0] for wall in walls] + [walls[0][0]]  # Close the polygon
+
+    # Build the graph (adjacency list)
+    graph = {i: [] for i in range(len(switches))}
+    for i, switch in enumerate(switches):
+        for j, light in enumerate(lights):
+            if is_visible(switch, light, walls, polygon_boundary):
+                graph[i].append(j)
+
+    # Array to keep track of which light is matched to which switch
+    match = [-1] * len(lights)
+
+    # DFS for finding a match
+    def dfs(switch, visited):
+        for light in graph[switch]:
+            if not visited[light]:
+                visited[light] = True
+                if match[light] == -1 or dfs(match[light], visited):
+                    match[light] = switch
+                    return True
+        return False
+
+    # Maximum bipartite matching
+    def maximum_matching():
+        result = 0
+        for switch in range(len(switches)):
+            visited = [False] * len(lights)
+            if dfs(switch, visited):
+                result += 1
+        return result
+
+    # Output the matches
+    print("\nCalculating matches...")
+    max_match = maximum_matching()
+    print(f"Maximum Matching: {max_match}")
+    for light, switch in enumerate(match):
+        if switch != -1:
+            print(f"Switch {switch + 1} (at {switches[switch]}) controls Light {light + 1} (at {lights[light]})")
+
+# Run the main function
+if __name__ == "__main__":
+    main()
